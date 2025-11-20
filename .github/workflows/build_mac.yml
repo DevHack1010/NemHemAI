@@ -1,0 +1,66 @@
+name: Build Mac App
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build Mac App
+        run: pyinstaller mac_build.spec --clean --noconfirm
+
+      - name: Create DMG (Optional)
+        run: |
+          brew install create-dmg
+          mkdir -p dist/dmg
+          create-dmg \
+            --volname "NemhemAI Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --hide-extension "NemhemAI.app" \
+            --app-drop-link 600 185 \
+            "dist/dmg/NemhemAI-Installer.dmg" \
+            "dist/NemhemAI.app" || true
+        continue-on-error: true
+
+      - name: Upload App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NemhemAI-Mac-App
+          path: dist/NemhemAI.app
+
+      - name: Upload DMG Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NemhemAI-Mac-Installer
+          path: dist/dmg/*.dmg
