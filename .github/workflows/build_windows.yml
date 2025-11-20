@@ -1,0 +1,58 @@
+name: Build Windows Exe
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build Windows Exe
+        run: pyinstaller main.exe.spec --clean --noconfirm
+
+      # Optional: Build Installer using Inno Setup
+      # This requires the installer.iss file to be present and correct
+      - name: Compile Installer (Inno Setup)
+        uses: MinSikKim/innosetup-action@v1
+        with:
+          path: installer.iss
+
+      - name: Upload Exe Artifact (Folder)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NemhemAI-Windows-Folder
+          path: dist/NemhemAI
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NemhemAI-Windows-Installer
+          path: installer_output/*.exe
