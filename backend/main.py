@@ -8,6 +8,13 @@ import urllib.parse
 import pandas as pd
 import numpy as np
 import matplotlib
+
+# Fix Windows console encoding for emoji support
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -69,7 +76,7 @@ from fastapi.responses import FileResponse
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import datetime
@@ -158,7 +165,7 @@ def ensure_database_schema():
 Base.metadata.create_all(bind=engine)
 ensure_database_schema()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Using bcrypt 5.0.0 directly (no passlib wrapper needed)
 SECRET_KEY = "supersecretkey"  # Change this in production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week
@@ -181,11 +188,39 @@ def get_db():
     finally:
         db.close()
 
+def truncate_password(password: str) -> str:
+    """
+    Truncate password to 72 bytes for bcrypt compatibility.
+    Bcrypt (including version 5.0.0) has a maximum password length of 72 bytes.
+    This function ensures passwords are safely truncated at byte boundaries.
+    """
+    if not isinstance(password, str):
+        password = str(password)
+    
+    # Convert to bytes and truncate to 72 bytes
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) <= 72:
+        return password
+    
+    # Truncate and decode, handling potential multi-byte character splits
+    truncated_bytes = password_bytes[:72]
+    # Decode with error handling to avoid breaking on partial multi-byte chars
+    return truncated_bytes.decode('utf-8', errors='ignore')
+
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    truncated_password = truncate_password(plain_password)
+    # Use bcrypt 5.0.0 directly
+    password_bytes = truncated_password.encode('utf-8')
+    hash_bytes = hashed_password.encode('utf-8') if isinstance(hashed_password, str) else hashed_password
+    return bcrypt.checkpw(password_bytes, hash_bytes)
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    truncated_password = truncate_password(password)
+    # Use bcrypt 5.0.0 directly
+    password_bytes = truncated_password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: datetime.timedelta | None = None):
     to_encode = data.copy()
@@ -782,10 +817,19 @@ def ask_model(data: PromptInput, db=Depends(get_db), current_user: User = Depend
         if doc.extracted_text:
             pdf_context += f"[PDF {idx+1} Content Start: {doc.filename}]\n{doc.extracted_text}\n[PDF {idx+1} Content End]\n"
 
-    # NEW: Search SearxNG for relevant information
+    # NEW: Search SearxNG for relevant information with comprehensive validation
     searxng_context = ""
+    search_metadata = {
+        "search_attempted": True,
+        "search_successful": False,
+        "results_count": 0,
+        "content_length": 0,
+        "error": None
+    }
+    
     try:
-        searxng_url = "http://localhost:8888/search"  # Using local SearxNG instance
+        print(f"🔍 [SearxNG] Attempting search for: {data.prompt[:50]}...")
+        searxng_url = "https://search.hbubli.cc/"  # Using local SearxNG instance
         params = {
             "q": data.prompt,
             "format": "json",
@@ -795,29 +839,122 @@ def ask_model(data: PromptInput, db=Depends(get_db), current_user: User = Depend
         }
         
         search_response = requests.get(searxng_url, params=params, timeout=10)
-        if search_response.ok:
-            search_data = search_response.json()
-            search_results = search_data.get("results", [])[:5]  # Limit to 5 results
+        
+        # Check HTTP response status
+        if not search_response.ok:
+            error_msg = f"HTTP {search_response.status_code}: {search_response.text[:200]}"
+            print(f"❌ [SearxNG] Request failed: {error_msg}")
+            search_metadata["error"] = error_msg
+        else:
+            print(f"✅ [SearxNG] Request successful (HTTP {search_response.status_code})")
             
-            if search_results:
+            # Parse JSON response
+            try:
+                search_data = search_response.json()
+                print(f"📦 [SearxNG] JSON parsed successfully")
+            except Exception as json_err:
+                error_msg = f"JSON parse error: {str(json_err)}"
+                print(f"❌ [SearxNG] {error_msg}")
+                search_metadata["error"] = error_msg
+                raise
+            
+            # Extract and validate results
+            search_results = search_data.get("results", [])
+            total_results = len(search_results)
+            print(f"📊 [SearxNG] Found {total_results} total results")
+            
+            if total_results == 0:
+                print(f"⚠️  [SearxNG] No search results returned for query")
+                search_metadata["error"] = "No results found"
+            else:
+                # Limit to top 5 results
+                search_results = search_results[:5]
+                search_metadata["results_count"] = len(search_results)
+                
+                # Build context with validation
                 searxng_context = "\n[SEARCH RESULTS START]\n"
+                valid_results = 0
+                
                 for idx, result in enumerate(search_results, 1):
-                    title = result.get("title", "No title")
-                    content = result.get("content", "No content")
-                    url = result.get("url", "No URL")
+                    title = result.get("title", "").strip()
+                    content = result.get("content", "").strip()
+                    url = result.get("url", "").strip()
+                    
+                    # Validate that we have actual content
+                    if not title and not content:
+                        print(f"⚠️  [SearxNG] Result {idx} has no title or content, skipping")
+                        continue
+                    
+                    # Use defaults only if specific fields are missing
+                    title = title if title else "No title"
+                    content = content if content else "No content available"
+                    url = url if url else "No URL"
+                    
                     searxng_context += f"Source {idx}: {title}\nURL: {url}\nContent: {content}\n\n"
+                    valid_results += 1
+                
                 searxng_context += "[SEARCH RESULTS END]\n\n"
+                
+                # Validate final context
+                search_metadata["content_length"] = len(searxng_context)
+                
+                if valid_results == 0:
+                    print(f"❌ [SearxNG] All results were empty, discarding context")
+                    searxng_context = ""
+                    search_metadata["error"] = "All results empty"
+                elif search_metadata["content_length"] < 100:
+                    print(f"⚠️  [SearxNG] Context very short ({search_metadata['content_length']} chars)")
+                else:
+                    search_metadata["search_successful"] = True
+                    print(f"✅ [SearxNG] Successfully extracted {valid_results} valid results ({search_metadata['content_length']} chars)")
+                    print(f"📝 [SearxNG] Context preview: {searxng_context[:200]}...")
+                    
+    except requests.exceptions.Timeout:
+        error_msg = "Request timeout (10s exceeded)"
+        print(f"❌ [SearxNG] {error_msg}")
+        search_metadata["error"] = error_msg
+    except requests.exceptions.ConnectionError as e:
+        error_msg = f"Connection failed: {str(e)}"
+        print(f"❌ [SearxNG] {error_msg}")
+        search_metadata["error"] = error_msg
     except Exception as e:
-        print(f"SearxNG search failed: {e}")
+        error_msg = f"Unexpected error: {str(e)}"
+        print(f"❌ [SearxNG] {error_msg}")
+        search_metadata["error"] = error_msg
+    
+    # Log final search status
+    if search_metadata["search_successful"]:
+        print(f"🎯 [SearxNG] Search metadata: {search_metadata}")
+    else:
+        print(f"⚠️  [SearxNG] Search failed or produced no usable content: {search_metadata}")
 
-    # Combine all contexts
+    # Combine all contexts with validation logging
     full_prompt = ""
+    context_sources = []
+    
     if pdf_context:
         full_prompt += pdf_context
+        context_sources.append(f"PDF ({len(pdf_context)} chars)")
+        print(f"📄 [Context] Added PDF context: {len(pdf_context)} characters")
+    
     if searxng_context:
         full_prompt += searxng_context
+        context_sources.append(f"SearxNG ({len(searxng_context)} chars)")
+        print(f"🔍 [Context] Added SearxNG context: {len(searxng_context)} characters")
+    
+    if context:
+        context_sources.append(f"Chat History ({len(context)} chars)")
+        print(f"💬 [Context] Added chat history: {len(context)} characters")
     
     full_prompt += context + f"Based on the above search results and context, please answer the following question: {data.prompt}\nAI:"
+    
+    # Log final prompt stats
+    print(f"📊 [LLM Input] Total prompt length: {len(full_prompt)} characters")
+    print(f"📊 [LLM Input] Context sources: {', '.join(context_sources) if context_sources else 'None'}")
+    print(f"📊 [LLM Input] User question: {data.prompt[:100]}...")
+    
+    if not searxng_context and not pdf_context and not context:
+        print(f"⚠️  [LLM Input] Warning: No context provided, LLM will rely only on training data")
 
     # Use Ollama local API
     ollama_url = "http://localhost:11434/api/generate"

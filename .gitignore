@@ -13,7 +13,15 @@ dist/
 *.msi
 *.pyz
 
+# Electron build outputs
+electron-dist/
+out/
+
+# Keep electron/build for icons
+!electron/build/
+
 # Python
+backend/venv/
 __pycache__/
 *.pyc
 *.pyo

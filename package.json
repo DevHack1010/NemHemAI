@@ -2,14 +2,27 @@
   "name": "vite_react_shadcn_ts",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "description": "NemhemAI - AI Chat Assistant Desktop Application",
+  "author": "NemhemAI",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "start": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron": "electron .",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:8001 && electron .\"",
+    "electron:dev:simple": "concurrently \"npm run dev\" \"npm run electron:start\"",
+    "electron:start": "node -e \"setTimeout(() => {}, 5000)\" && electron .",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:linux": "npm run build && electron-builder --linux",
+    "electron:build:all": "npm run build && electron-builder -mwl",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -66,7 +79,9 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.1.0",
     "vaul": "^0.9.3",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "axios": "^1.6.5",
+    "electron-is-dev": "^2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
@@ -85,6 +100,10 @@
     "tailwindcss": "^3.4.11",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^5.4.1"
+    "vite": "^5.4.1",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
   }
 }

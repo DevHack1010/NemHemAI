@@ -7,8 +7,10 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
-    mode === 'development' && componentTagger(),
+    // Disabled lovable-tagger due to ESM compatibility with Electron
+    // mode === 'development' && componentTagger(),
   ].filter(Boolean),
+  base: './',
   define: {
     global: 'globalThis',
   },

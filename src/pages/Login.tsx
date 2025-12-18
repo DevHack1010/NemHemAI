@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+
+// ... (rest of imports)
+
+// ... (inside component)
+          <Link to="/register" className="text-[#a45cf6] hover:underline">Register</Link>
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { API_BASE_URL } from '@/lib/api';
@@ -79,7 +84,7 @@ const Login = () => {
         </form>
         <div className="mt-6 text-center">
           <span className="text-slate-400 text-sm">Don't have an account? </span>
-          <a href="/register" className="text-[#a45cf6] hover:underline">Register</a>
+          <Link to="/register" className="text-[#a45cf6] hover:underline">Register</Link>
         </div>
       </div>
     </div>

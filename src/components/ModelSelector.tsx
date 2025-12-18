@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 export const models = [
   { id: 'mistral:latest', name: 'Mistral', description: 'General / Fast', category: 'General', color: 'from-blue-500 to-cyan-600' },
   { id: 'llama3.1:latest', name: 'Llama 3.1', description: 'General / Reasoning', category: 'General', color: 'from-blue-500 to-cyan-600' },
-  { id: 'deepseek-v2:latest', name: 'DeepSeek V2', description: 'Coding + Reasoning', category: 'Coding', color: 'from-green-500 to-emerald-600' },
+  // { id: 'deepseek-v2:latest', name: 'DeepSeek V2', description: 'Coding + Reasoning', category: 'Coding', color: 'from-green-500 to-emerald-600' },
   { id: 'qwen2.5vl:latest', name: 'Qwen 2.5 VL', description: 'Multimodal (Text + Image)', category: 'Multimodal', color: 'from-purple-500 to-pink-600' },
   { id: 'deepseek-coder-v2:latest', name: 'DeepSeek Coder V2', description: 'Advanced Coding', category: 'Coding', color: 'from-green-500 to-emerald-600' },
 ];

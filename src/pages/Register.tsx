@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { API_BASE_URL } from '@/lib/api';
@@ -93,7 +93,7 @@ const Register = () => {
         </form>
         <div className="mt-6 text-center">
           <span className="text-slate-400 text-sm">Already have an account? </span>
-          <a href="/login" className="text-[#a45cf6] hover:underline">Login</a>
+          <Link to="/login" className="text-[#a45cf6] hover:underline">Login</Link>
         </div>
       </div>
     </div>
